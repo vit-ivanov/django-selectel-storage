@@ -11,6 +11,11 @@ import os
 import selectel
 import requests
 
+try:  # PY3
+    import urllib.parse as urlparse
+except ImportError:  # PY2
+    import urlparse
+
 
 MAX_RETRIES = 3
 POOL_CONNECTIONS = 50
@@ -69,7 +74,7 @@ class SelectelStorage(DjangoStorage):
             )
 
     def _name(self, name):
-        return '/' + name.lstrip('/')
+        return '/' + name.lstrip('/').replace('\\', '/')
 
     def _open(self, name, mode='rb'):
         return ContentFile(self.container.get(self._name(name)))
@@ -103,8 +108,16 @@ class SelectelStorage(DjangoStorage):
         except requests.exceptions.HTTPError:
             raise IOError('Unable get size for %s' % name)
 
+    def modified_time(self, name):
+        try:
+            return self.container.info(self._name(name))['last-modified']
+        except requests.exceptions.HTTPError:
+            raise IOError('Unable get modified_time for %s' % name)
+
     def url(self, name):
-        return os.path.join(self.get_base_url().rstrip('/'),  name.lstrip('/'))
+        return urlparse.urljoin(
+            self.get_base_url().rstrip("/") + "/",
+            name.lstrip('/'))
 
 
 class SelectelStaticStorage(SelectelStorage):
