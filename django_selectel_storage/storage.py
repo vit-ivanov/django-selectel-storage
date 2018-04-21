@@ -7,6 +7,7 @@ from __future__ import division
 from django.core.files.storage import Storage as DjangoStorage
 from django.core.files.base import ContentFile
 from django.conf import settings
+from django.utils.functional import SimpleLazyObject
 import os
 import selectel
 import requests
@@ -28,11 +29,16 @@ def setting(name, default=None):
 
 class SelectelStorage(DjangoStorage):
     def __init__(self, **kwargs):
-        self.container = selectel.storage.Container(
-            auth=self.get_auth(**kwargs),
-            key=self.get_key(**kwargs),
-            name=self.get_container_name(**kwargs))
-        self.setup_requests_adapter(**kwargs)
+        def make_container():
+            container = selectel.storage.Container(
+                auth=self.get_auth(**kwargs),
+                key=self.get_key(**kwargs),
+                name=self.get_container_name(**kwargs)
+            )
+            self.setup_requests_adapter(container, **kwargs)
+            return container
+
+        self.container = SimpleLazyObject(make_container)
 
     def get_auth(self, **kwargs):
         return setting('SELECTEL_USERNAME')
@@ -55,13 +61,10 @@ class SelectelStorage(DjangoStorage):
             pool_maxsize=setting('SELECTEL_POOL_MAXSIZE',
                                  POOL_MAXSIZE))
 
-    def setup_requests_adapter(self, **kwargs):
+    def setup_requests_adapter(self, container, **kwargs):
         adapter = self.get_requests_adapter(**kwargs)
-        self.mount_requests_adapter('http://', adapter)
-        self.mount_requests_adapter('https://', adapter)
-
-    def mount_requests_adapter(self, prefix, adapter):
-        self.container.storage.session.mount(prefix, adapter)
+        container.storage.session.mount('http://', adapter)
+        container.storage.session.mount('https://', adapter)
 
     def get_base_url(self):
         base_url = self.get_container_url()
