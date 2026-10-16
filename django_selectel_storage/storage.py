@@ -96,6 +96,10 @@ class SelectelStorage(DjangoStorage):
         try:
             self.container.info(self._name(name))
             return True
+        except KeyError:
+            # HEAD returned 200 but without ETag (e.g. after an interrupted
+            # upload); selectel's info() fails on it, yet the object exists.
+            return True
         except selectel.storage.requests.exceptions.HTTPError:
             return False
 
